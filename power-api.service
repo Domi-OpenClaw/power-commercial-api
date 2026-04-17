@@ -1,0 +1,17 @@
+[Unit]
+Description=Power Spot Price Forecast API
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/.openclaw/workspace/servers/power-commercial-api
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 10129 --log-level warning
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/power-api.log
+StandardError=append:/var/log/power-api.log
+Environment="PYTHONPATH=/home/admin/.openclaw/workspace/servers/power-commercial-api"
+
+[Install]
+WantedBy=multi-user.target
