@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电力现货价格监控平台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#21262d;--primary:#1a2a4a;--accent:#58a6ff;--charge:#00d4aa;--discharge:#ff6b35;--high:#ff4757;--low:#3b82f6;--text:#c9d1d9;--text-dim:#8b949e;--warn:#f0a500}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.navbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.navbar-brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;color:#fff}
+.navbar-brand .logo{width:28px;height:28px;background:linear-gradient(135deg,var(--charge),#0077ff);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;cursor:pointer;transition:all .2s}
+.btn:hover{background:var(--primary);border-color:var(--accent);color:#fff}
+.btn-primary{background:var(--primary);border-color:var(--accent);color:#fff}
+.tab-bar{display:flex;gap:4px;padding:12px 24px 0;border-bottom:1px solid var(--border);overflow-x:auto}
+.tab{padding:8px 18px;border-radius:6px 6px 0 0;font-size:13px;color:var(--text-dim);cursor:pointer;border:1px solid transparent;border-bottom:none;white-space:nowrap;transition:all .2s}
+.tab:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.tab.active{color:var(--accent);border-color:var(--border);border-bottom-color:var(--bg);background:var(--bg)}
+.view{display:none;padding:20px 24px}.view.active{display:block}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.form-group{display:flex;flex-direction:column;gap:4px}.form-group label{font-size:12px;color:var(--text-dim)}
+.form-group input,.form-group select{min-width:150px}
+select,input[type="date"],input[type="text"],input[type="number"]{padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px}
+.card-title{font-size:13px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}}
+.chart{width:100%;height:380px}.chart-sm{height:280px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+.stat-value{font-size:28px;font-weight:700}.stat-label{font-size:12px;color:var(--text-dim);margin-top:4px}
+.storage-grid{display:grid;grid-template-columns:repeat(24,1fr);gap:3px;margin-top:12px}
+.storage-cell{aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;cursor:default;min-height:32px}
+.storage-cell.charge{background:var(--charge);color:#0d1117}
+.storage-cell.discharge{background:var(--discharge);color:#fff}
+.storage-cell.hold{background:var(--border);color:var(--text-dim)}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto;padding:24px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.modal-title{font-size:16px;font-weight:600;color:#fff}
+.modal-close{background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px}
+.modal-close:hover{color:var(--text)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{padding:8px 12px;border-bottom:1px solid var(--border);text-align:left}
+.tbl th{color:var(--text-dim);font-weight:600;font-size:11px;text-transform:uppercase}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(0,212,170,.15);color:var(--charge)}
+.badge-red{background:rgba(255,71,87,.15);color:var(--high)}
+.badge-orange{background:rgba(255,107,53,.15);color:var(--discharge)}
+.badge-gray{background:rgba(139,148,158,.15);color:var(--text-dim)}
+.form-row{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.api-key-display{background:rgba(0,212,170,.1);border:1px solid var(--charge);border-radius:6px;padding:10px 14px;font-family:monospace;font-size:13px;color:var(--charge);word-break:break-all;margin-top:8px}
+.error-msg{color:var(--high);font-size:13px;padding:8px 0}
+.loading{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
+@media(max-width:600px){.navbar{padding:0 12px}.view{padding:12px}.storage-grid{grid-template-columns:repeat(8,1fr)}.chart,.chart-sm{height:280px}}
+</style>
+</head>
+<body>
+
+<nav class="navbar"><div class="navbar-brand"><div class="logo">&#9889;</div>&#30005;&#21147;&#29616;&#36135;&#20215;&#26684;&#30417;&#25511;&#24179;&#21488;</div><div class="navbar-actions"><button class="btn btn-primary" onclick="openApiKeyModal()">&#128273; API Key</button></div></nav>
+<div class="tab-bar">
+<div class="tab active" data-tab="home">&#128202; &#20202;&#34920;&#30424;</div>
+<div class="tab" data-tab="trend">&#128200; &#20215;&#26684;&#36208;&#21183;</div>
+<div class="tab" data-tab="quantile">&#128201; &#20215;&#26684;&#20998;&#20301;&#25968;</div>
+<div class="tab" data-tab="storage">&#128267; &#20698;&#33021;&#31574;&#30053;</div>
+</div>
+
+<!-- HOME -->
+<div class="view active" id="view-home">
+<div class="controls">
+<div class="form-group"><label>&#30465;&#20221;</label><select id="home-province"><option>&#21152;&#36733;&#20013;...</option></select></div>
+<div class="form-group"><label>&#26085;&#26399;</label><input type="date" id="home-date"></div>
+<button class="btn btn-primary" onclick="homeQuery()">&#128269; &#26597;&#35810;</button>
+</div>
+<div class="grid-4" style="margin-bottom:16px">
+<div class="stat-card"><div class="stat-value" id="stat-avg" style="color:var(--accent)">--</div><div class="stat-label">P50 &#24179;&#22343;&#20215;</div></div>
+<div class="stat-card"><div class="stat-value" id="stat-min" style="color:var(--low)">--</div><div class="stat-label">&#26368;&#20302;&#20215; P10</div></div>
+<div class="stat-card"><div class="stat-value" id="stat-max" style="color:var(--high)">--</div><div class="stat-label">&#26368;&#39640;&#20215; P90</div></div>
+<div class="stat-card"><div class="stat-value" id="stat-charge-count" style="color:var(--charge)">--</div><div class="stat-label">&#20805;&#30005;&#26102;&#27573;</div></div>
+</div>
+<div class="grid-2">
+<div class="card"><div class="card-title">&#20170;&#26085;&#21508;&#30465; P50 &#20215;&#26684;</div><div id="chart-provinces" class="chart-sm"></div></div>
+<div class="card">
+<div class="card-title">&#20698;&#33021;&#31574;&#30053;&#24314;&#35758;</div>
+<div class="grid-3" style="margin-bottom:12px">
+<div class="stat-card"><div class="stat-value" id="home-charge" style="color:var(--charge)">--</div><div class="stat-label">&#20805;&#30005;</div></div>
+<div class="stat-card"><div class="stat-value" id="home-discharge" style="color:var(--discharge)">--</div><div class="stat-label">&#25918;&#30005;</div></div>
+<div class="stat-card"><div class="stat-value" id="home-hold" style="color:var(--text-dim)">--</div><div class="stat-label">&#35266;&#26395;</div></div>
+</div>
+<div id="home-storage-grid" class="storage-grid"></div>
+</div>
+</div>
+<div class="card" style="margin-top:16px"><div class="card-title">&#20215;&#26684;&#36208;&#21183;&#39044;&#35272;</div><div id="chart-home-trend" class="chart"></div></div>
+</div>
+
+<!-- TREND -->
+<div class="view" id="view-trend">
+<div class="controls">
+<div class="form-group"><label>&#30465;&#20221;</label><select id="trend-province"><option>&#21152;&#36733;&#20013;...</option></select></div>
+<div class="form-group"><label>&#26085;&#26399;</label><input type="date" id="trend-date"></div>
+<button class="btn btn-primary" onclick="trendQuery()">&#128269; &#26597;&#35810;</button>
+</div>
+<div class="card"><div class="card-title">24&#23567;&#26102;&#20215;&#26684;&#36208;&#21183;</div><div id="chart-trend" class="chart"></div></div>
+</div>
+
+<!-- QUANTILE -->
+<div class="view" id="view-quantile">
+<div class="controls">
+<div class="form-group"><label>&#30465;&#20221;</label><select id="quantile-province"><option>&#21152;&#36733;&#20013;...</option></select></div>
+<div class="form-group"><label>&#26085;&#26399;</label><input type="date" id="quantile-date"></div>
+<button class="btn btn-primary" onclick="quantileQuery()">&#128269; &#26597;&#35810;</button>
+</div>
+<div class="card"><div class="card-title">&#20998;&#26102;&#27573;&#20215;&#26684;&#20998;&#20301;&#25968;</div><div id="chart-quantile" class="chart"></div></div>
+</div>
+
+<!-- STORAGE -->
+<div class="view" id="view-storage">
+<div class="controls">
+<div class="form-group"><label>&#30465;&#20221;</label><select id="storage-province"><option>&#21152;&#36733;&#20013;...</option></select></div>
+<div class="form-group"><label>&#26085;&#26399;</label><input type="date" id="storage-date"></div>
+<button class="btn btn-primary" onclick="storageQuery()">&#128269; &#26597;&#35810;</button>
+</div>
+<div class="grid-2">
+<div class="card"><div class="card-title">&#20215;&#26684;&#26354;&#32447; + &#20698;&#33021;&#26102;&#27573;</div><div id="chart-storage-curve" class="chart-sm"></div></div>
+<div class="card"><div class="card-title">&#20698;&#33021;&#25805;&#20316;&#26085;&#21382;</div>
+<div id="storage-grid-detail" class="storage-grid"></div>
+<div style="display:flex;gap:16px;margin-top:12px;font-size:12px">
+<span><span style="display:inline-block;width:12px;height:12px;background:var(--charge);border-radius:2px"></span>&#20805;&#30005;</span>
+<span><span style="display:inline-block;width:12px;height:12px;background:var(--discharge);border-radius:2px"></span>&#25918;&#30005;</span>
+<span><span style="display:inline-block;width:12px;height:12px;background:var(--border);border-radius:2px"></span>&#35266;&#26395;</span>
+</div>
+</div>
+</div>
+<div class="card" style="margin-top:16px"><div class="card-title">&#20998;&#26102;&#27573;&#25805;&#20316;&#35814;&#24773;</div><div id="storage-detail-table"></div></div>
+</div>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="modal-apikey">
+<div class="modal">
+<div class="modal-header"><div class="modal-title">&#128273; API Key &#31649;&#29702;</div><button class="modal-close" onclick="closeApiKeyModal()">&#10005;</button></div>
+<div style="display:flex;gap:4px;margin-bottom:16px">
+<button class="btn" id="ak-tab-list" onclick="showAkTab('list')">Key &#21015;&#34920;</button>
+<button class="btn" id="ak-tab-create" onclick="showAkTab('create')">&#21019;&#24314;&#26032; Key</button>
+<button class="btn" id="ak-tab-stats" onclick="showAkTab('stats')">&#35843;&#29992;&#32479;&#35745;</button>
+</div>
+<div id="ak-content-list"><div id="ak-list-container"><div class="loading">&#21152;&#36733;&#20013;...</div></div></div>
+<div id="ak-content-create" style="display:none">
+<div class="form-row">
+<div class="form-group"><label>Key &#21517;&#31216;</label><input type="text" id="ak-name" placeholder="&#23458;&#25143;&#31471;-&#25163;&#26426;"></div>
+<div class="form-group"><label>&#26377;&#25928;&#26399;&#65288;&#22825;&#65289;</label><input type="number" id="ak-days" value="30" min="1"></div>
+<div class="form-group"><label>&#35843;&#29992;&#38480;&#39069;</label><input type="number" id="ak-max-calls" value="1000" min="1"></div>
+</div>
+<button class="btn btn-primary" onclick="createApiKey()">&#21019;&#24314; Key</button>
+<div id="ak-create-result" style="margin-top:12px"></div>
+</div>
+<div id="ak-content-stats" style="display:none"><div id="ak-stats-container"><div class="loading">&#21152;&#36733;&#20013;...</div></div></div>
+</div>
+</div>
+
+<script>
+var API_BASE=window.location.origin;
+var ADMIN_KEY='sk-admin-power-2026',TEST_KEY='sk-test-power-2026';
+var hdrs={'api-key':TEST_KEY},adminHdrs={'api-key':ADMIN_KEY};
+var provinces=[],currentForecast=null,akTab='list';
+
+document.addEventListener('DOMContentLoaded',function(){
+  initTabs();initDates();loadProvinces();
+});
+
+function initTabs(){
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click',function(){
+      document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+      document.querySelectorAll('.view').forEach(function(x){x.classList.remove('active')});
+      t.classList.add('active');
+      document.getElementById('view-'+t.dataset.tab).classList.add('active');
+    });
+  });
+}
+
+function initDates(){
+  var t=new Date(),pad=function(n){return String(n).padStart(2,'0')};
+  var ds=t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate());
+  ['home-date','trend-date','quantile-date','storage-date'].forEach(function(id){
+    var el=document.getElementById(id);el.value=ds;el.max=ds;
+  });
+}
+
+function apiGet(path,h,cb,eb){
+  fetch(API_BASE+path,{headers:h||hdrs}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(cb).catch(eb||function(e){alert('请求失败: '+e.message)});
+}
+function apiPost(path,body,h,cb,eb){
+  fetch(API_BASE+path,{method:'POST',headers:Object.assign({},h||adminHdrs,{'Content-Type':'application/json'}),body:JSON.stringify(body)}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(cb).catch(eb||function(e){alert('请求失败: '+e.message)});
+}
+function apiDel(path,h,cb,eb){
+  fetch(API_BASE+path,{method:'DELETE',headers:h||adminHdrs}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);return r.json();
+  }).then(cb).catch(eb||function(e){alert('请求失败: '+e.message)});
+}
+
+function loadProvinces(){
+  apiGet('/api/v1/provinces',hdrs,function(resp){
+    if(resp.code===200){
+      var data=resp.data;
+      // Convert {formal_market:[], pilot_market:[]} to [{name, market_type}]
+      var all=[];
+      if(data.formal_market){
+        data.formal_market.forEach(function(n){all.push({name:n,market_type:'正式现货'})});
+      }
+      if(data.pilot_market){
+        data.pilot_market.forEach(function(n){all.push({name:n,market_type:'试运行'})});
+      }
+      provinces=all;
+    }
+    var opts=provinces.map(function(p){return '<option value="'+p.name+'">'+p.name+' ('+p.market_type+')</option>'}).join('');
+    ['home-province','trend-province','quantile-province','storage-province'].forEach(function(id){document.getElementById(id).innerHTML=opts});
+    var first=provinces[0]?provinces[0].name:'';
+    ['home-province','trend-province','quantile-province','storage-province'].forEach(function(id){document.getElementById(id).value=first});
+    loadProvinceBars(); // 省份加载完后再画柱状图
+  });
+}
+
+function loadProvinceBars(){
+  var el=document.getElementById('chart-provinces');
+  if(!el)return;
+  var chart=echarts.init(el);
+  var rows=[],date=document.getElementById('home-date').value;
+  var loadNext=function(i){
+    if(i>=provinces.length){
+      rows.sort(function(a,b){return a.value-b.value});
+      var maxVal=rows.length?Math.max.apply(null,rows.map(function(r){return r.value}))*1.1:100;
+      chart.setOption({
+        tooltip:{trigger:'axis',formatter:function(p){return p[0].name+': <b>'+p[0].value+'</b> 元/MWh'}},
+        grid:{left:80,right:50,top:5,bottom:5},
+        xAxis:{type:'value',max:maxVal,axisLabel:{color:'#8b949e',fontSize:11},splitLine:{lineStyle:{color:'#21262d'}}},
+        yAxis:{type:'category',data:rows.map(function(r){return r.name}),axisLabel:{color:'#c9d1d9',fontSize:11},axisLine:{lineStyle:{color:'#21262d'}},axisTick:{show:false}},
+        series:[{type:'bar',barWidth:14,data:rows.map(function(r){return{value:r.value,itemStyle:{color:r.value<200?'#3b82f6':r.value>500?'#ff4757':'#00d4aa',borderRadius:[0,4,4,0]}}}),label:{show:true,position:'right',color:'#c9d1d9',fontSize:11,formatter:'{c}'}}]
+      });
+      window.addEventListener('resize',function(){chart.resize()});
+      return;
+    }
+    var p=provinces[i];
+    apiGet('/api/v1/forecasts?province='+encodeURIComponent(p.name)+'&date='+date,hdrs,function(resp){
+      if(resp.code===200&&resp.data&&resp.data.forecast_24h&&resp.data.forecast_24h.length){
+        var p50s=resp.data.forecast_24h.map(function(h){return h.p50_median}).filter(function(v){return v!=null});
+        if(p50s.length)rows.push({name:p.name,value:parseFloat((p50s.reduce(function(a,b){return a+b},0)/p50s.length).toFixed(2))});
+      }
+      loadNext(i+1);
+    },function(){loadNext(i+1)});
+  };
+  loadNext(0);
+}
+
+function homeQuery(){
+  var province=document.getElementById('home-province').value,date=document.getElementById('home-date').value;
+  if(!province||!date)return;
+  apiGet('/api/v1/forecasts?province='+encodeURIComponent(province)+'&date='+date,hdrs,function(resp){
+    if(resp.code!==200){alert(resp.msg);return}
+    if(!resp.data||!resp.data.forecast_24h||!resp.data.forecast_24h.length){alert('无数据');return}
+    currentForecast=resp.data.forecast_24h;
+    renderHomeStats(currentForecast);renderHomeTrend(currentForecast);renderHomeStorage(currentForecast);
+  });
+}
+
+function renderHomeStats(f){
+  var p10s=f.map(function(h){return h.p10_low}).filter(function(v){return v!=null});
+  var p50s=f.map(function(h){return h.p50_median}).filter(function(v){return v!=null});
+  var p90s=f.map(function(h){return h.p90_high}).filter(function(v){return v!=null});
+  document.getElementById('stat-avg').textContent=p50s.length?(p50s.reduce(function(a,b){return a+b},0)/p50s.length).toFixed(2):'--';
+  document.getElementById('stat-min').textContent=p10s.length?Math.min.apply(null,p10s).toFixed(2):'--';
+  document.getElementById('stat-max').textContent=p90s.length?Math.max.apply(null,p90s).toFixed(2):'--';
+  var ch=f.filter(function(h){return h.action==='charge'}).length;
+  var dis=f.filter(function(h){return h.action==='discharge'}).length;
+  document.getElementById('stat-charge-count').textContent=ch;
+  document.getElementById('home-charge').textContent=ch;
+  document.getElementById('home-discharge').textContent=dis;
+  document.getElementById('home-hold').textContent=f.length-ch-dis;
+}
+
+function renderHomeTrend(f){
+  var chart=echarts.init(document.getElementById('chart-home-trend'));
+  var hours=f.map(function(h){return h.hour+'时'});
+  var p10s=f.map(function(h){return h.p10_low});
+  var p50s=f.map(function(h){return h.p50_median});
+  var p90s=f.map(function(h){return h.p90_high});
+  chart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',backgroundColor:'#161b22',borderColor:'#21262d',textStyle:{color:'#c9d1d9',fontSize:12},formatter:function(params){
+      var i=params[0].dataIndex;var h=f[i];if(!h)return'';
+      var ac=h.action==='charge'?'#00d4aa':h.action==='discharge'?'#ff6b35':'#8b949e';
+      var p10=h.p10_low!=null?h.p10_low.toFixed(2):'-';
+      var p50=h.p50_median!=null?h.p50_median.toFixed(2):'-';
+      var p90=h.p90_high!=null?h.p90_high.toFixed(2):'-';
+      var act=h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望';
+      return '<div style="font-size:12px;line-height:1.8"><b>'+h.hour+':00</b><br/><span style="color:#3b82f6">P10</span>: '+p10+' 元/MWh<br/><span style="color:#00d4aa">P50</span>: '+p50+' 元/MWh<br/><span style="color:#ff4757">P90</span>: '+p90+' 元/MWh<br/><span style="color:'+ac+'">策略</span>: <b>'+act+'</b><br/><span style="color:#8b949e">'+(h.action_reason||'-')+'</span></div>';
+    }},
+    legend:{data:['P10低价','P50中位','P90高价'],textStyle:{color:'#8b949e'},top:0},
+    grid:{left:60,right:20,top:36,bottom:30},
+    xAxis:{type:'category',data:hours,axisLabel:{color:'#8b949e',fontSize:10,interval:1},axisLine:{lineStyle:{color:'#21262d'}},splitLine:{show:false}},
+    yAxis:{type:'value',name:'元/MWh',nameTextStyle:{color:'#8b949e'},axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[
+      {name:'P10低价',type:'line',data:p10s,smooth:true,lineStyle:{width:2,color:'#3b82f6'},itemStyle:{color:'#3b82f6'},areaStyle:{color:'rgba(59,130,246,0.05)'}},
+      {name:'P50中位',type:'line',data:p50s,smooth:true,lineStyle:{width:2,color:'#00d4aa'},itemStyle:{color:'#00d4aa'},symbol:'circle',symbolSize:5},
+      {name:'P90高价',type:'line',data:p90s,smooth:true,lineStyle:{width:2,color:'#ff4757'},itemStyle:{color:'#ff4757'},areaStyle:{color:'rgba(255,71,87,0.05)'}}
+    ],
+    dataZoom:[{type:'inside',start:0,end:100}]
+  });
+  window.addEventListener('resize',function(){chart.resize()});
+}
+
+function renderHomeStorage(f){
+  var container=document.getElementById('home-storage-grid');
+  container.innerHTML='';
+  f.forEach(function(h){
+    var cell=document.createElement('div');
+    var cls=h.action==='charge'?'charge':h.action==='discharge'?'discharge':'hold';
+    cell.className='storage-cell '+cls;
+    cell.textContent=h.hour+'时';
+    cell.title=h.hour+':00 - '+(h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望')+' ('+(h.p50_median!=null?h.p50_median.toFixed(2):'-')+'元)';
+    container.appendChild(cell);
+  });
+}
+
+function trendQuery(){
+  var province=document.getElementById('trend-province').value,date=document.getElementById('trend-date').value;
+  if(!province||!date)return;
+  apiGet('/api/v1/forecasts?province='+encodeURIComponent(province)+'&date='+date,hdrs,function(resp){
+    if(resp.code!==200){alert(resp.msg);return}
+    if(!resp.data||!resp.data.forecast_24h||!resp.data.forecast_24h.length){alert('无数据');return}
+    currentForecast=resp.data.forecast_24h;
+    renderTrendChart(currentForecast);
+  });
+}
+
+function renderTrendChart(f){
+  var chart=echarts.init(document.getElementById('chart-trend'));
+  var hours=f.map(function(h){return h.hour+'时'});
+  var p10s=f.map(function(h){return h.p10_low});
+  var p50s=f.map(function(h){return h.p50_median});
+  var p90s=f.map(function(h){return h.p90_high});
+  chart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',backgroundColor:'#161b22',borderColor:'#21262d',textStyle:{color:'#c9d1d9'},formatter:function(params){
+      var i=params[0].dataIndex;var h=f[i];if(!h)return'';
+      var ac=h.action==='charge'?'#00d4aa':h.action==='discharge'?'#ff6b35':'#8b949e';
+      return '<div style="font-size:12px;line-height:1.8"><b>'+h.hour+':00</b><br/><span style="color:#3b82f6">P10</span>: '+(h.p10_low!=null?h.p10_low.toFixed(2):'-')+'<br/><span style="color:#00d4aa">P50</span>: '+(h.p50_median!=null?h.p50_median.toFixed(2):'-')+'<br/><span style="color:#ff4757">P90</span>: '+(h.p90_high!=null?h.p90_high.toFixed(2):'-')+'<br/><span style="color:'+ac+'">'+(h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望')+'</b><br/><span style="color:#8b949e">'+(h.action_reason||'-')+'</span></div>';
+    }},
+    legend:{data:['P10低价','P50中位','P90高价'],textStyle:{color:'#8b949e'},top:0},
+    grid:{left:60,right:20,top:36,bottom:40},
+    xAxis:{type:'category',data:hours,axisLabel:{color:'#8b949e',fontSize:10,interval:1},axisLine:{lineStyle:{color:'#21262d'}},splitLine:{show:false}},
+    yAxis:{type:'value',name:'元/MWh',nameTextStyle:{color:'#8b949e'},axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[
+      {name:'P10低价',type:'line',data:p10s,smooth:true,lineStyle:{width:2,color:'#3b82f6'},itemStyle:{color:'#3b82f6'},areaStyle:{color:'rgba(59,130,246,0.05)'}},
+      {name:'P50中位',type:'line',data:p50s,smooth:true,lineStyle:{width:2,color:'#00d4aa'},itemStyle:{color:'#00d4aa'}},
+      {name:'P90高价',type:'line',data:p90s,smooth:true,lineStyle:{width:2,color:'#ff4757'},itemStyle:{color:'#ff4757'},areaStyle:{color:'rgba(255,71,87,0.05)'}}
+    ],
+    dataZoom:[{type:'inside',start:0,end:100}]
+  });
+  window.addEventListener('resize',function(){chart.resize()});
+}
+
+function quantileQuery(){
+  var province=document.getElementById('quantile-province').value,date=document.getElementById('quantile-date').value;
+  if(!province||!date)return;
+  apiGet('/api/v1/forecasts?province='+encodeURIComponent(province)+'&date='+date,hdrs,function(resp){
+    if(resp.code!==200){alert(resp.msg);return}
+    if(!resp.data||!resp.data.forecast_24h||!resp.data.forecast_24h.length){alert('无数据');return}
+    currentForecast=resp.data.forecast_24h;
+    renderQuantileChart(currentForecast);
+  });
+}
+
+function renderQuantileChart(f){
+  var chart=echarts.init(document.getElementById('chart-quantile'));
+  var hours=f.map(function(h){return h.hour+'时'});
+  var p10s=f.map(function(h){return h.p10_low});
+  var p50s=f.map(function(h){return h.p50_median});
+  var p90s=f.map(function(h){return h.p90_high});
+  function pc(v){if(v==null)return'#8b949e';if(v<150)return'#3b82f6';if(v<300)return'#00d4aa';if(v<500)return'#f0a500';return'#ff4757';}
+  chart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',backgroundColor:'#161b22',borderColor:'#21262d',textStyle:{color:'#c9d1d9'},formatter:function(params){
+      var i=params[0].dataIndex;var h=f[i];if(!h)return'';
+      return '<div style="font-size:12px;line-height:1.8"><b>'+h.hour+':00</b><br/><span style="color:#3b82f6">P10</span>: '+(h.p10_low!=null?h.p10_low.toFixed(2):'-')+'<br/><span style="color:#00d4aa">P50</span>: '+(h.p50_median!=null?h.p50_median.toFixed(2):'-')+'<br/><span style="color:#ff4757">P90</span>: '+(h.p90_high!=null?h.p90_high.toFixed(2):'-')+'</div>';
+    }},
+    legend:{data:['P10低价','P50中位','P90高价'],textStyle:{color:'#8b949e'},top:0},
+    grid:{left:60,right:20,top:36,bottom:40},
+    xAxis:{type:'category',data:hours,axisLabel:{color:'#8b949e',fontSize:10,interval:1},axisLine:{lineStyle:{color:'#21262d'}},splitLine:{show:false}},
+    yAxis:{type:'value',name:'元/MWh',nameTextStyle:{color:'#8b949e'},axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[
+      {name:'P10低价',type:'bar',stack:'qt',data:p10s,itemStyle:{color:function(p){return pc(p.data)},borderRadius:[0,0,0,0]}},
+      {name:'P50中位',type:'bar',stack:'qt',data:p50s,itemStyle:{color:function(p){return pc(p.data)},borderRadius:[3,3,0,0]}},
+      {name:'P90高价',type:'bar',stack:'qt',data:p90s,itemStyle:{color:function(p){return pc(p.data)},borderRadius:[3,3,0,0]}}
+    ]
+  });
+  window.addEventListener('resize',function(){chart.resize()});
+}
+
+function storageQuery(){
+  var province=document.getElementById('storage-province').value,date=document.getElementById('storage-date').value;
+  if(!province||!date)return;
+  apiGet('/api/v1/forecasts?province='+encodeURIComponent(province)+'&date='+date,hdrs,function(resp){
+    if(resp.code!==200){alert(resp.msg);return}
+    if(!resp.data||!resp.data.forecast_24h||!resp.data.forecast_24h.length){alert('无数据');return}
+    currentForecast=resp.data.forecast_24h;
+    renderStorageCurve(currentForecast);renderStorageGrid(currentForecast);renderStorageDetailTable(currentForecast);
+  });
+}
+
+function renderStorageCurve(f){
+  var chart=echarts.init(document.getElementById('chart-storage-curve'));
+  var hours=f.map(function(h){return h.hour+'时'});
+  var p50s=f.map(function(h){return h.p50_median});
+  var markAreas=f.map(function(h,i){
+    if(h.action==='charge')return[{xAxis:i,itemStyle:{color:'rgba(0,212,170,0.12)'}},{xAxis:i+1}];
+    if(h.action==='discharge')return[{xAxis:i,itemStyle:{color:'rgba(255,107,53,0.12)'}},{xAxis:i+1}];
+    return null;
+  }).filter(function(x){return x!=null});
+  chart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis',backgroundColor:'#161b22',borderColor:'#21262d',textStyle:{color:'#c9d1d9'},formatter:function(params){
+      var i=params[0].dataIndex;var h=f[i];if(!h)return'';
+      var ac=h.action==='charge'?'#00d4aa':h.action==='discharge'?'#ff6b35':'#8b949e';
+      return '<div style="font-size:12px;line-height:1.8"><b>'+h.hour+':00</b> — <span style="color:'+ac+'">'+(h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望')+'</span><br/>P50: '+(h.p50_median!=null?h.p50_median.toFixed(2):'-')+' 元/MWh</div>';
+    }},
+    grid:{left:60,right:20,top:20,bottom:30},
+    xAxis:{type:'category',data:hours,axisLabel:{color:'#8b949e',fontSize:10,interval:1},axisLine:{lineStyle:{color:'#21262d'}},splitLine:{show:false}},
+    yAxis:{type:'value',name:'元/MWh',nameTextStyle:{color:'#8b949e'},axisLabel:{color:'#8b949e'},splitLine:{lineStyle:{color:'#21262d'}}},
+    series:[{type:'line',data:p50s,smooth:true,lineStyle:{width:2,color:'#58a6ff'},itemStyle:{color:'#58a6ff'},areaStyle:{color:'rgba(88,166,255,0.06)'},markArea:{data:markAreas}}],
+    dataZoom:[{type:'inside',start:0,end:100}]
+  });
+  window.addEventListener('resize',function(){chart.resize()});
+}
+
+function renderStorageGrid(f){
+  var container=document.getElementById('storage-grid-detail');
+  container.innerHTML='';
+  f.forEach(function(h){
+    var cell=document.createElement('div');
+    var cls=h.action==='charge'?'charge':h.action==='discharge'?'discharge':'hold';
+    cell.className='storage-cell '+cls;
+    cell.textContent=h.hour+'时';
+    var price=h.p50_median!=null?h.p50_median.toFixed(1):'-';
+    var act=h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望';
+    cell.title=h.hour+':00\n价格: '+price+' 元/MWh\n操作: '+act+'\n原因: '+h.action_reason;
+    container.appendChild(cell);
+  });
+}
+
+function renderStorageDetailTable(f){
+  var container=document.getElementById('storage-detail-table');
+  var ch=f.filter(function(h){return h.action==='charge'});
+  var dis=f.filter(function(h){return h.action==='discharge'});
+  var hld=f.filter(function(h){return h.action!=='charge'&&h.action!=='discharge'});
+  var html='<div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">'+
+    '<span style="color:var(--charge)">充电: '+ch.length+'时段</span>'+
+    '<span style="color:var(--discharge)">放电: '+dis.length+'时段</span>'+
+    '<span style="color:var(--text-dim)">观望: '+hld.length+'时段</span></div>'+
+    '<table class="tbl"><thead><tr><th>时段</th><th>P10</th><th>P50</th><th>P90</th><th>策略</th><th>原因</th></tr></thead><tbody>';
+  f.forEach(function(h){
+    var bc=h.action==='charge'?'badge-green':h.action==='discharge'?'badge-orange':'badge-gray';
+    var at=h.action==='charge'?'充电':h.action==='discharge'?'放电':'观望';
+    html+='<tr><td><b>'+h.hour+':00</b></td>'+
+      '<td style="color:var(--low)">'+(h.p10_low!=null?h.p10_low.toFixed(2):'-')+'</td>'+
+      '<td style="color:var(--charge)">'+(h.p50_median!=null?h.p50_median.toFixed(2):'-')+'</td>'+
+      '<td style="color:var(--high)">'+(h.p90_high!=null?h.p90_high.toFixed(2):'-')+'</td>'+
+      '<td><span class="badge '+bc+'">'+at+'</span></td>'+
+      '<td style="color:var(--text-dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(h.action_reason||'')+'">'+(h.action_reason||'-')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  container.innerHTML=html;
+}
+
+/* === API KEY MODAL === */
+function openApiKeyModal(){document.getElementById('modal-apikey').classList.add('open');showAkTab(akTab);}
+function closeApiKeyModal(){document.getElementById('modal-apikey').classList.remove('open');}
+document.getElementById('modal-apikey').addEventListener('click',function(e){if(e.target===this)closeApiKeyModal()});
+
+function showAkTab(tab){
+  akTab=tab;
+  ['list','create','stats'].forEach(function(t){
+    document.getElementById('ak-tab-'+t).classList.toggle('btn-primary',t===tab);
+    document.getElementById('ak-content-'+t).style.display=t===tab?'':'none';
+  });
+  if(tab==='list')loadAkList();
+  else if(tab==='stats')loadAkStats();
+}
+
+function loadAkList(){
+  var container=document.getElementById('ak-list-container');
+  container.innerHTML='<div class="loading">加载中...</div>';
+  apiGet('/api/v1/admin/keys',adminHdrs,function(resp){
+    if(resp.code!==200){container.innerHTML='<div class="error-msg">'+(resp.msg||'加载失败')+'</div>';return;}
+    var keys=resp.data||[];
+    if(!keys.length){container.innerHTML='<div style="color:var(--text-dim);font-size:13px">暂无 Key</div>';return;}
+    var html='<table class="tbl"><thead><tr><th>名称</th><th>Key</th><th>有效期至</th><th>调用/上限</th><th>操作</th></tr></thead><tbody>';
+    keys.forEach(function(k){
+      var usage=k.max_calls>0?(k.calls/k.max_calls*100).toFixed(1)+'%':'-';
+      html+='<tr><td><b>'+k.name+'</b></td><td><code style="color:var(--charge)">'+k.key+'</code></td><td>'+k.expires+'</td><td>'+k.calls+'/'+k.max_calls+' ('+usage+')</td><td><button class="btn" onclick="deleteAk(\''+k.name+'\')" style="color:var(--high);border-color:var(--high)">撤销</button></td></tr>';
+    });
+    html+='</tbody></table>';
+    container.innerHTML=html;
+  });
+}
+
+function createApiKey(){
+  var name=document.getElementById('ak-name').value.trim();
+  var days=parseInt(document.getElementById('ak-days').value)||30;
+  var max_calls=parseInt(document.getElementById('ak-max-calls').value)||1000;
+  var result=document.getElementById('ak-create-result');
+  if(!name){result.innerHTML='<div class="error-msg">请输入 Key 名称</div>';return;}
+  result.innerHTML='<div style="color:var(--text-dim)">创建中...</div>';
+  apiPost('/api/v1/admin/keys',{name:name,days:days,max_calls:max_calls},adminHdrs,function(resp){
+    if(resp.code!==200){result.innerHTML='<div class="error-msg">'+(resp.msg||'创建失败')+'</div>';return;}
+    result.innerHTML='<div style="color:var(--charge);margin-bottom:8px">✅ Key 创建成功！</div>'+
+      '<div class="api-key-display">'+resp.data.key+'</div>'+
+      '<div style="font-size:12px;color:var(--text-dim);margin-top:6px">有效期至：'+resp.data.expires+'（请妥善保存）</div>';
+    document.getElementById('ak-name').value='';
+    loadAkList();
+  });
+}
+
+function deleteAk(name){
+  if(!confirm('确认撤销 Key "'+name+'"？'))return;
+  apiDel('/api/v1/admin/keys/'+encodeURIComponent(name),adminHdrs,function(resp){
+    if(resp.code!==200){alert(resp.msg||'删除失败');return;}
+    loadAkList();
+  });
+}
+
+function loadAkStats(){
+  var container=document.getElementById('ak-stats-container');
+  container.innerHTML='<div class="loading">加载中...</div>';
+  apiGet('/api/v1/admin/stats',adminHdrs,function(resp){
+    if(resp.code!==200){container.innerHTML='<div class="error-msg">'+(resp.msg||'加载失败')+'</div>';return;}
+    var d=resp.data||{};
+    var keys=d.keys||[];
+    var html='<div class="stat-card" style="margin-bottom:16px;text-align:left;padding:20px"><div style="font-size:24px;font-weight:700;color:var(--accent)">'+(d.total_calls||0)+'</div><div style="font-size:12px;color:var(--text-dim);margin-top:4px">总调用次数</div></div>'+
+      '<table class="tbl"><thead><tr><th>名称</th><th>调用次数</th><th>上限</th><th>使用率</th><th>到期日</th></tr></thead><tbody>';
+    keys.forEach(function(k){
+      var pct=k.limit>0?(k.calls/k.limit*100).toFixed(1)+'%':'-';
+      var pctColor=parseFloat(pct)>80?'var(--high)':parseFloat(pct)>50?'var(--warn)':'var(--charge)';
+      html+='<tr><td><b>'+k.name+'</b></td><td>'+k.calls+'</td><td>'+k.limit+'</td><td style="color:'+pctColor+'">'+pct+'</td><td>'+k.expires+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    container.innerHTML=html;
+  });
+}
+</script>
+</body>
+</html>
