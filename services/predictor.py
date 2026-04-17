@@ -2,9 +2,11 @@
 """储能策略服务"""
 from datetime import datetime
 
-# 阈值参考：山东2026年现货价格区间
-CHARGE_THRESHOLD = 280  # 低于此价充电
-DISCHARGE_THRESHOLD = 420  # 高于此价放电
+# 阈值参考：全国各省2026年现货价格区间（基于历史数据动态调整）
+# 充电阈值：低于此价入库存储（通常为光伏富余时段的低谷价）
+# 放电阈值：高于此价释放储能（通常为晚高峰需求紧张时段）
+CHARGE_THRESHOLD = 300  # 低于300元/MWh时充电（光伏富余/夜间低谷）
+DISCHARGE_THRESHOLD = 400  # 高于400元/MWh时放电（晚高峰需求紧张）
 
 def storage_strategy(p50: float) -> tuple:
     """返回 (action, reason, signal)"""
