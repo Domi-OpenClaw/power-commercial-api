@@ -10,12 +10,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.background import BackgroundScheduler
+from config_loader import get
 
 from routers import forecast, admin
 from services.cache import get_redis
 from services.weather import start_weather_refresh
+from services.coal import start_coal_refresh
 
 # ========== FastAPI 配置 ==========
 app = FastAPI(
@@ -52,6 +56,29 @@ app.add_middleware(
 # 注册路由
 app.include_router(forecast.router)
 app.include_router(admin.router)
+
+# ========== Dashboard 静态文件路由 ==========
+DASHBOARD_DIR = Path(__file__).parent / "dashboard"
+
+@app.get("/dashboard")
+def serve_dashboard():
+    """仪表盘首页"""
+    index_file = DASHBOARD_DIR / "index.html"
+    if index_file.exists():
+        return RedirectResponse(url="/dashboard/")
+    return RedirectResponse(url="/dashboard/index.html")
+
+@app.get("/dashboard/{path:path}")
+def serve_dashboard_files(path: str):
+    """仪表盘静态资源"""
+    file_path = DASHBOARD_DIR / path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    # fallback to index
+    index_file = DASHBOARD_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return JSONResponse(status_code=404, content={"error": "Dashboard not found"})
 
 # ========== 健康检查 ==========
 @app.get("/health")
@@ -96,9 +123,15 @@ if os.getenv("SCHEDULER_ENABLED", "false").lower() == "true":
 
 # ========== 启动时初始化 ==========
 start_weather_refresh()
+start_coal_refresh()
 
 # ========== 启动 ==========
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("SERVER_PORT", get("server.port", 10129)))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+# ========== 知识图谱静态文件 ==========
+kg_path = Path(__file__).parent / "static" / "kg"
+if kg_path.exists():
+    app.mount("/kg", StaticFiles(directory=str(kg_path), html=True), name="kg")

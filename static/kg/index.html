@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Domi 知识库</title>
+  <style>
+    :root { --bg: #0f172a; --bg-card: #1e293b; --border: #334155; --text: #f1f5f9; --text-secondary: #94a3b8; --primary: #3b82f6; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+    .topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+    .logo { font-size: 15px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+    .logo span { color: var(--text); }
+    .search-box { flex: 1; }
+    .search-box input { width: 100%; max-width: 300px; padding: 6px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: 13px; outline: none; transition: border-color .2s; }
+    .search-box input:focus { border-color: var(--primary); }
+    .view-toggle { display: flex; gap: 4px; }
+    .view-toggle button { padding: 5px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+    .view-toggle button.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .tabs { display: flex; gap: 6px; padding: 8px 16px; border-bottom: 1px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: 4px 11px; background: transparent; border: 1px solid var(--border); border-radius: 20px; color: var(--text-secondary); cursor: pointer; font-size: 12px; white-space: nowrap; }
+    .tab:hover { border-color: var(--primary); color: var(--text); }
+    .tab.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .tab .count { font-size: 10px; opacity: .7; }
+    .main { display: flex; height: calc(100vh - 90px); overflow: hidden; }
+    #graph-view { flex: 1; position: relative; overflow: hidden; }
+    #graph-canvas { display: block; cursor: grab; touch-action: none; }
+    #graph-canvas:active { cursor: grabbing; }
+    .graph-hint { position: absolute; bottom: 12px; left: 14px; font-size: 11px; color: var(--text-secondary); background: rgba(15,23,42,.8); padding: 5px 10px; border-radius: 6px; pointer-events: none; }
+    .graph-hint span { color: var(--primary); font-weight: 600; }
+    #minimap { position: absolute; top: 12px; right: 12px; width: 110px; height: 72px; background: rgba(15,23,42,.9); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; opacity: .7; }
+    .legend { position: absolute; bottom: 12px; right: 12px; background: rgba(15,23,42,.85); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 11px; backdrop-filter: blur(6px); }
+    .legend-title { color: var(--text-secondary); margin-bottom: 6px; font-size: 10px; }
+    .legend-items { display: flex; flex-wrap: wrap; gap: 6px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    #list-view { flex: 1; overflow-y: auto; padding: 12px 16px; display: none; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; cursor: pointer; transition: all .2s; }
+    .card:hover { background: #273449; border-color: var(--primary); transform: translateY(-1px); }
+    .card.faded { opacity: .15; }
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.4; }
+    .card-cat { font-size: 10px; padding: 2px 7px; border-radius: 10px; color: white; white-space: nowrap; flex-shrink: 0; }
+    .card-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin: 6px 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .card-source { font-size: 10px; color: var(--text-secondary); }
+    .highlight { background: #fbbf24; color: #000; padding: 0 2px; border-radius: 2px; }
+    .detail-panel { position: fixed; top: 0; right: -380px; width: 370px; height: 100vh; background: var(--bg-card); border-left: 1px solid var(--border); z-index: 200; transition: right .3s ease; overflow-y: auto; display: flex; flex-direction: column; }
+    .detail-panel.open { right: 0; }
+    .detail-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-card); z-index: 1; }
+    .detail-title { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; padding-right: 10px; line-height: 1.4; }
+    .detail-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 6px; }
+    .detail-close:hover { background: var(--border); }
+    .detail-body { padding: 14px; flex: 1; }
+    .detail-section { margin-bottom: 14px; }
+    .detail-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .detail-cat { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; color: white; }
+    .detail-value { font-size: 12px; color: var(--text); line-height: 1.7; }
+    .detail-url { display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px; background: var(--primary); color: white; border-radius: 8px; text-decoration: none; font-size: 12px; }
+    .detail-url:hover { background: #2563eb; }
+    .detail-meta { display: flex; gap: 12px; flex-wrap: wrap; }
+    .detail-meta-item { font-size: 11px; color: var(--text-secondary); }
+    .detail-meta-item strong { color: var(--text); }
+    .loading-bar { position: fixed; top: 0; left: 0; height: 2px; background: var(--primary); transition: width .3s; z-index: 9999; pointer-events: none; }
+    .sim-hint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,.85); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; font-size: 11px; color: var(--text-secondary); pointer-events: none; }
+    @media (max-width: 600px) {
+      .detail-panel { width: 100%; left: 0; right: 0; top: auto; bottom: -100%; height: 80vh; border-left: none; border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; }
+      .detail-panel.open { bottom: 0; }
+      .card-grid { grid-template-columns: 1fr; }
+      .main { height: calc(100vh - 88px); }
+      .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="loading-bar" id="loading-bar"></div>
+
+<div class="topbar">
+  <div class="logo">Domi<span> 知识库</span></div>
+  <div class="search-box"><input type="text" id="search-input" placeholder="搜索知识点…" autocomplete="off"></div>
+  <div class="view-toggle">
+    <button id="btn-graph" class="active" onclick="setView('graph')">图谱</button>
+    <button id="btn-list" onclick="setView('list')">列表</button>
+  </div>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="main">
+  <div id="graph-view">
+    <canvas id="graph-canvas"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="graph-hint" id="graph-hint">
+      滚轮缩放 · 拖拽移动 · <span>点击节点</span>查看详情 · 双指放大手势支持
+    </div>
+    <div class="sim-hint" id="sim-hint" style="display:none">🔄 布局计算中…</div>
+  </div>
+  <div id="list-view"><div class="card-grid" id="cards"></div></div>
+</div>
+
+<div class="detail-panel" id="detail">
+  <div class="detail-header">
+    <div class="detail-title" id="detail-title"></div>
+    <button class="detail-close" onclick="closeDetail()">✕</button>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  Pure-Canvas Force-Directed Graph
+//  No D3, no Sigma, no external libs
+// ─────────────────────────────────────────────────────────────────────────────
+
+const THEME_CONFIG = {
+  '朗新科技':     { color: '#3B82F6', emoji: '🏢' },
+  '可信数据空间': { color: '#10B981', emoji: '🔐' },
+  '充电桩':       { color: '#F97316', emoji: '⚡' },
+  '虚拟电厂':     { color: '#EF4444', emoji: '🔋' },
+  '数据基础设施': { color: '#8B5CF6', emoji: '🏛️' },
+};
+
+const TAG_CONFIG = {
+  '数据基础设施': { color: '#8B5CF6', emoji: '🏛️' },
+  '政策':         { color: '#3B82F6', emoji: '📋' },
+  '市场':         { color: '#10B981', emoji: '📈' },
+  '政府':         { color: '#EF4444', emoji: '🏛️' },
+  '金融':         { color: '#F59E0B', emoji: '💰' },
+  '招标':         { color: '#EC4899', emoji: '📢' },
+  '能源':         { color: '#F97316', emoji: '⚡' },
+};
+
+// ── State ──────────────────────────────────────────────────────────────────
+let D = { nodes: [], links: [] };
+let nodeData = {};       // id → node object
+let simNodes = [];        // simulation nodes
+let simLinks = [];        // simulation links
+let sim = null;           // animation id
+let activeTab = '全部';
+let activeView = 'graph';
+let searchQ = '';
+let detailNode = null;
+
+// Canvas state
+let canvas, ctx;
+let transform = { x: 0, y: 0, scale: 1 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0, tx: 0, ty: 0 };
+let hoveredNode = null;
+let nodeUnderMouse = null;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function loadData(cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', 'https://cdn.jsdelivr.net/gh/Domi-OpenClaw/code-space@main/knowledge-graph/data.js?t=' + Date.now(), true);
+  xhr.onload = function () {
+    if (xhr.status === 200) {
+      try {
+        var fn = new Function(xhr.responseText + '\nreturn KNOWLEDGE_DATA;');
+        cb(fn());
+      } catch (e) { console.error('parse error', e); cb({ nodes: [], links: [] }); }
+    } else { cb({ nodes: [], links: [] }); }
+  };
+  xhr.onerror = function () { cb({ nodes: [], links: [] }); };
+  xhr.send();
+}
+
+function getNodes() {
+  return D.nodes.filter(n => {
+    const okTab = activeTab === '全部' || n.theme === activeTab;
+    const okQ   = !searchQ || n.label.toLowerCase().includes(searchQ) || (n.summary || '').toLowerCase().includes(searchQ);
+    return okTab && okQ;
+  });
+}
+
+function hl(txt, q) {
+  if (!q || !txt) return txt;
+  try {
+    return txt.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '<span class="highlight">$1</span>');
+  } catch (e) { return txt; }
+}
+
+function setProgress(pct) {
+  document.getElementById('loading-bar').style.width = pct + '%';
+}
+
+// ── Simulation ─────────────────────────────────────────────────────────────
+function initSimulation() {
+  const W = canvas.width;
+  const H = canvas.height;
+  const nodes = getNodes();
+  const nodeIds = new Set(nodes.map(n => n.id));
+
+  simNodes = nodes.map((n, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2;
+    const r = Math.min(W, H) * 0.3;
+    return {
+      id: n.id,
+      x: W / 2 + Math.cos(angle) * r * (0.5 + Math.random() * 0.5),
+      y: H / 2 + Math.sin(angle) * r * (0.5 + Math.random() * 0.5),
+      vx: 0, vy: 0,
+      fx: null, fy: null,
+      r: Math.min(6 + (n.quality || 0) * 0.1, 14),
+      color: (THEME_CONFIG[n.theme] || { color: '#6B7280' }).color,
+      label: n.label,
+      node: n,
+    };
+  });
+
+  simLinks = D.links
+    .map(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return { s, t };
+    })
+    .filter(l => nodeIds.has(l.s) && nodeIds.has(l.t));
+
+  // Run simulation
+  if (sim) cancelAnimationFrame(sim);
+  document.getElementById('sim-hint').style.display = 'block';
+
+  let tick = 0;
+  const maxTicks = 400;
+
+  function step() {
+    if (tick >= maxTicks) {
+      document.getElementById('sim-hint').style.display = 'none';
+      return;
+    }
+    tick++;
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Repulsion between all node pairs (Barnes-Hut approximated: only nearby)
+    for (let i = 0; i < simNodes.length; i++) {
+      const a = simNodes[i];
+      if (a.fx !== null) { a.x = a.fx; a.vx = 0; continue; }
+      let fx = 0, fy = 0;
+      for (let j = 0; j < simNodes.length; j++) {
+        if (i === j) continue;
+        const b = simNodes[j];
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = (a.r + b.r + 20) * 3 / dist;
+        fx += (dx / dist) * force;
+        fy += (dy / dist) * force;
+      }
+      // Center gravity
+      fx += (W / 2 - a.x) * 0.001;
+      fy += (H / 2 - a.y) * 0.001;
+      a.vx = (a.vx + fx) * 0.85;
+      a.vy = (a.vy + fy) * 0.85;
+    }
+
+    // Link attraction
+    for (const l of simLinks) {
+      const a = simNodes.find(n => n.id === l.s);
+      const b = simNodes.find(n => n.id === l.t);
+      if (!a || !b) continue;
+      if (a.fx !== null || b.fx !== null) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = (dist - 80) * 0.03;
+      a.vx += (dx / dist) * force;
+      a.vy += (dy / dist) * force;
+      b.vx -= (dx / dist) * force;
+      b.vy -= (dy / dist) * force;
+    }
+
+    // Apply velocity, bound to canvas
+    for (const n of simNodes) {
+      if (n.fx !== null) continue;
+      n.x = Math.max(n.r, Math.min(W - n.r, n.x + n.vx));
+      n.y = Math.max(n.r, Math.min(H - n.r, n.y + n.vy));
+    }
+
+    draw();
+    sim = requestAnimationFrame(step);
+  }
+
+  sim = requestAnimationFrame(step);
+}
+
+function draw() {
+  if (!canvas) return;
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(transform.x, transform.y);
+  ctx.scale(transform.scale, transform.scale);
+
+  const visible = new Set(simNodes.map(n => n.id));
+
+  // Draw links
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = '#334155';
+  ctx.globalAlpha = 0.5;
+  for (const l of simLinks) {
+    const a = simNodes.find(n => n.id === l.s);
+    const b = simNodes.find(n => n.id === l.t);
+    if (!a || !b) continue;
+    const highlighted = detailNode && (l.s === detailNode.id || l.t === detailNode.id);
+    ctx.globalAlpha = highlighted ? 1 : 0.15;
+    ctx.strokeStyle = highlighted ? '#60a5fa' : '#334155';
+    ctx.lineWidth = highlighted ? 1.5 : 0.8;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Draw nodes
+  for (const n of simNodes) {
+    if (n.hidden) continue;
+    const isDetail = detailNode && n.id === detailNode.id;
+    const isHovered = n.id === hoveredNode;
+    const r = isDetail ? n.r * 1.4 : isHovered ? n.r * 1.2 : n.r;
+
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = n.color;
+    ctx.globalAlpha = isDetail ? 1 : 0.85;
+    ctx.fill();
+    ctx.strokeStyle = isDetail ? '#fff' : 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = isDetail ? 2 : 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Label (only when zoomed in enough or large nodes)
+    if (transform.scale > 0.6 || r > 9) {
+      ctx.font = `${Math.max(9, Math.min(11, 10 * transform.scale))}px -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = isDetail ? '#fff' : '#94a3b8';
+      ctx.fillText(n.label.length > 12 ? n.label.slice(0, 12) + '…' : n.label, n.x, n.y + r + 10);
+    }
+  }
+
+  ctx.restore();
+}
+
+// ── Event Handlers ─────────────────────────────────────────────────────────
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - transform.x) / transform.scale,
+    y: (sy - transform.y) / transform.scale,
+  };
+}
+
+function findNodeAt(wx, wy) {
+  // Reverse order (top-most first)
+  for (let i = simNodes.length - 1; i >= 0; i--) {
+    const n = simNodes[i];
+    const dx = n.x - wx;
+    const dy = n.y - wy;
+    if (dx * dx + dy * dy <= n.r * n.r * 1.5) return n;
+  }
+  return null;
+}
+
+function onMouseMove(e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+
+  if (isDragging) {
+    transform.x = dragStart.tx + (e.clientX - dragStart.x);
+    transform.y = dragStart.ty + (e.clientY - dragStart.y);
+    draw();
+    return;
+  }
+
+  const { x, y } = screenToWorld(sx, sy);
+  const node = findNodeAt(x, y);
+  hoveredNode = node ? node.id : null;
+  canvas.style.cursor = node ? 'pointer' : 'grab';
+  draw();
+}
+
+function onMouseDown(e) {
+  if (e.button !== 0) return;
+  isDragging = true;
+  dragStart = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y };
+  canvas.style.cursor = 'grabbing';
+}
+
+function onMouseUp(e) {
+  if (!isDragging) return;
+  isDragging = false;
+  canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
+
+  const dx = e.clientX - dragStart.x;
+  const dy = e.clientY - dragStart.y;
+  if (Math.sqrt(dx * dx + dy * dy) < 5) {
+    // It's a click
+    const rect = canvas.getBoundingClientRect();
+    const { x, y } = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const node = findNodeAt(x, y);
+    if (node) {
+      showDetail(node.node);
+    } else {
+      closeDetail();
+    }
+  }
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  const newScale = Math.max(0.1, Math.min(5, transform.scale * factor));
+
+  // Zoom toward mouse
+  transform.x = mx - (mx - transform.x) * (newScale / transform.scale);
+  transform.y = my - (my - transform.y) * (newScale / transform.scale);
+  transform.scale = newScale;
+  draw();
+}
+
+// Touch support
+let lastTouchDist = 0;
+let lastTouchCenter = { x: 0, y: 0 };
+let singleTap = { x: 0, y: 0, t: 0 };
+
+function onTouchStart(e) {
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    singleTap = { x: t.clientX, y: t.clientY, t: Date.now() };
+    dragStart = { x: t.clientX, y: t.clientY, tx: transform.x, ty: transform.y };
+    isDragging = true;
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    const t0 = e.touches[0], t1 = e.touches[1];
+    lastTouchDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    lastTouchCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+  }
+}
+
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    const t = e.touches[0];
+    transform.x = dragStart.tx + (t.clientX - dragStart.x);
+    transform.y = dragStart.ty + (t.clientY - dragStart.y);
+    draw();
+  } else if (e.touches.length === 2) {
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+    const center = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+    const factor = dist / lastTouchDist;
+    const newScale = Math.max(0.1, Math.min(5, transform.scale * factor));
+    const rect = canvas.getBoundingClientRect();
+    const mx = center.x - rect.left;
+    const my = center.y - rect.top;
+    transform.x = mx - (mx - transform.x) * (newScale / transform.scale);
+    transform.y = my - (my - transform.y) * (newScale / transform.scale);
+    transform.scale = newScale;
+    lastTouchDist = dist;
+    draw();
+  }
+}
+
+function onTouchEnd(e) {
+  if (e.touches.length === 0) {
+    const dx = (e.changedTouches[0] || { clientX: singleTap.x }).clientX - singleTap.x;
+    const dy = (e.changedTouches[0] || { clientY: singleTap.y }).clientY - singleTap.y;
+    if (Math.sqrt(dx * dx + dy * dy) < 10 && Date.now() - singleTap.t < 300) {
+      const rect = canvas.getBoundingClientRect();
+      const { x, y } = screenToWorld(singleTap.x - rect.left, singleTap.y - rect.top);
+      const node = findNodeAt(x, y);
+      if (node) showDetail(node.node);
+      else closeDetail();
+    }
+    isDragging = false;
+  }
+}
+
+// ── Render UI ───────────────────────────────────────────────────────────────
+function renderTabs() {
+  const cats = ['全部', ...Object.keys(THEME_CONFIG).filter(c => D.nodes.some(n => n.theme === c))];
+  const cnt = {};
+  cats.forEach(c => {
+    cnt[c] = c === '全部' ? D.nodes.length : D.nodes.filter(n => n.theme === c).length;
+  });
+  document.getElementById('tabs').innerHTML = cats.map(c =>
+    `<button class="tab ${c === activeTab ? 'active' : ''}" onclick="setTab('${c}')">` +
+    `${c === '全部' ? '📚' : CC[c].emoji} ${c} <span class="count">${cnt[c]}</span></button>`
+  ).join('');
+}
+
+function renderLegend() {
+  document.getElementById('legend').innerHTML =
+    `<div class="legend-title">图例</div><div class="legend-items">` +
+    Object.entries(CC).map(([c, cfg]) =>
+      `<div class="legend-item"><div class="legend-dot" style="background:${cfg.color}"></div><span>${cfg.emoji} ${c}</span></div>`
+    ).join('') + '</div>';
+}
+
+function renderList() {
+  const grid = document.getElementById('cards');
+  const nodes = getNodes();
+  if (!nodes.length) {
+    grid.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:40vh;color:#94a3b8">没有找到匹配的知识点</div>';
+    return;
+  }
+  grid.innerHTML = nodes.map(n => {
+    const cfg = THEME_CONFIG[n.theme] || { color: '#6B7280', emoji: '📄' };
+    return `<div class="card" onclick="showDetailById('${n.id}')">
+      <div class="card-header">
+        <div class="card-title">${hl(n.label, searchQ)}</div>
+        <span class="card-cat" style="background:${cfg.color}">${cfg.emoji}</span>
+      </div>
+      <div class="card-summary">${hl(n.summary || '', searchQ)}</div>
+      <div class="card-footer">
+        <span class="card-source">${n.date || ''} · ${n.source || ''}</span>
+        <span style="font-size:10px;color:var(--text-secondary)">质量 ${Math.round(n.quality || 0)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Detail Panel ────────────────────────────────────────────────────────────
+function showDetail(n) {
+  detailNode = n;
+  const cfg = THEME_CONFIG[n.theme] || { color: '#6B7280', emoji: '📄' };
+  document.getElementById('detail-title').textContent = n.label;
+  document.getElementById('detail-body').innerHTML = `
+    <div class="detail-section">
+      <div class="detail-label">分类</div>
+      <span class="detail-cat" style="background:${(THEME_CONFIG[n.theme]||{color:'#6B7280'}).color}">${(THEME_CONFIG[n.theme]||{emoji:'🏛️'}).emoji} ${n.theme}</span>&nbsp;<span class="detail-cat" style="background:${(TAG_CONFIG[n.tag_category]||{color:'#475569'}).color}">${(TAG_CONFIG[n.tag_category]||{emoji:'📂'}).emoji} ${n.tag_category}</span>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">摘要</div>
+      <div class="detail-value">${n.summary || '（无摘要）'}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-label">元信息</div>
+      <div class="detail-meta">
+        <span class="detail-meta-item">来源: <strong>${n.source || '未知'}</strong></span>
+        <span class="detail-meta-item">日期: <strong>${n.date || '未知'}</strong></span>
+        <span class="detail-meta-item">质量: <strong>${Math.round(n.quality || 0)}</strong></span>
+      </div>
+    </div>
+    ${n.url ? `<div class="detail-section"><a href="${n.url}" target="_blank" class="detail-url">🔗 查看归档原文</a></div>` : ''}
+  `;
+  document.getElementById('detail').classList.add('open');
+  draw();
+}
+
+function showDetailById(id) {
+  const n = D.nodes.find(m => m.id === id);
+  if (n) showDetail(n);
+}
+
+function closeDetail() {
+  document.getElementById('detail').classList.remove('open');
+  detailNode = null;
+  draw();
+}
+
+// ── View Switch ─────────────────────────────────────────────────────────────
+function setView(v) {
+  activeView = v;
+  document.getElementById('btn-graph').classList.toggle('active', v === 'graph');
+  document.getElementById('btn-list').classList.toggle('active', v === 'list');
+  document.getElementById('graph-view').style.display  = v === 'graph' ? 'block' : 'none';
+  document.getElementById('list-view').style.display   = v === 'list'  ? 'block' : 'none';
+  if (v === 'graph') {
+    setTimeout(() => { resizeCanvas(); initSimulation(); }, 50);
+  } else {
+    renderList();
+  }
+}
+
+function setTab(t) {
+  activeTab = t;
+  renderTabs();
+  if (activeView === 'graph') initSimulation();
+  else renderList();
+}
+
+// ── Canvas Resize ───────────────────────────────────────────────────────────
+function resizeCanvas() {
+  if (!canvas) return;
+  const container = document.getElementById('graph-view');
+  canvas.width  = container.clientWidth;
+  canvas.height = container.clientHeight;
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('input', function () {
+  searchQ = this.value.trim().toLowerCase();
+  if (activeView === 'graph') initSimulation();
+  else renderList();
+});
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+canvas = document.getElementById('graph-canvas');
+ctx = canvas.getContext('2d');
+
+canvas.addEventListener('mousemove', onMouseMove);
+canvas.addEventListener('mousedown', onMouseDown);
+window.addEventListener('mouseup', onMouseUp);
+canvas.addEventListener('wheel', onWheel, { passive: false });
+canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+canvas.addEventListener('touchend', onTouchEnd);
+
+window.addEventListener('resize', () => {
+  if (activeView === 'graph') { resizeCanvas(); initSimulation(); }
+});
+
+setProgress(20);
+loadData(function (data) {
+  setProgress(60);
+  D = data;
+  D.nodes.forEach(n => { nodeData[n.id] = n; });
+  setProgress(80);
+  resizeCanvas();
+  renderTabs();
+  renderLegend();
+  if (activeView === 'graph') initSimulation();
+  else renderList();
+  setProgress(100);
+  setTimeout(() => setProgress(0), 400);
+});
+</script>
+</body>
+</html>

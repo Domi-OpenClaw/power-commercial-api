@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+知识图谱 data.js 生成器 v8
+- 质量分 <40 的条目直接跳过
+- topics 字段（5主题分类）作为 Tab 分类输出
+- 保留原始 tag 分类（政策/市场/…）作为 detail panel 属性
+"""
+
+import sys
+import datetime
+sys.path.insert(0, "/home/admin/.openclaw/skills/skill-image-gen/venv/lib/python3.11/site-packages")
+from tinydb import TinyDB
+
+DB_PATH  = "/home/admin/.openclaw/workspace/knowledge/db/knowledge-index.json"
+DATA_DIR = "/home/admin/.openclaw/workspace/code-space/knowledge-graph"
+DATA_FILE = f"{DATA_DIR}/data.js"
+
+# 5主题分类（Tab视图）
+THEME_CC = {
+    "数据基础设施": { "color": "#8B5CF6", "emoji": "🏛️" },  # 默认/泛行业
+    "可信数据空间": { "color": "#10B981", "emoji": "🔐" },
+    "充电桩":       { "color": "#F97316", "emoji": "⚡" },
+    "虚拟电厂":     { "color": "#EF4444", "emoji": "🔋" },
+    "朗新科技":     { "color": "#3B82F6", "emoji": "🏢" },
+}
+THEME_PREFIX = {
+    "数据基础设施": "ndi",
+    "可信数据空间": "td",
+    "充电桩":       "cd",
+    "虚拟电厂":     "vp",
+    "朗新科技":     "lx",
+}
+
+# 原始 tag→中文分类（资讯分类，detail panel 用）
+TAG_CC = {
+    "数据基础设施": { "color": "#8B5CF6", "emoji": "🏛️" },
+    "政策":         { "color": "#3B82F6", "emoji": "📋" },
+    "市场":         { "color": "#10B981", "emoji": "📈" },
+    "政府":         { "color": "#EF4444", "emoji": "🏛️" },
+    "金融":         { "color": "#F59E0B", "emoji": "💰" },
+    "招标":         { "color": "#EC4899", "emoji": "📢" },
+    "能源":         { "color": "#F97316", "emoji": "⚡" },
+}
+
+def get_tag_category(record):
+    """从 tags 字段取资讯分类"""
+    tags_str = record.get("tags", "") or ""
+    tag_map = {
+        "policy":  "政策",
+        "market":  "市场",
+        "gov":     "政府",
+        "finance": "金融",
+        "bidding": "招标",
+        "energy":  "能源",
+    }
+    for tag in tags_str.split(","):
+        tag = tag.strip().lower()
+        if tag in tag_map:
+            return tag_map[tag]
+    return "数据基础设施"
+
+def esc(s):
+    return s.replace("\\","\\\\").replace('"','\\"').replace("\n"," ")[:200]
+
+# ── 读取 ─────────────────────────────────────────────────────────────
+db = TinyDB(DB_PATH)
+tbl = db.table("knowledge")
+all_records = tbl.all()
+db.close()
+
+# ── 质量过滤 ────────────────────────────────────────────────────────
+from collections import Counter, OrderedDict
+
+nodes_out = []
+theme_counter = OrderedDict()
+dropped = 0
+
+for r in all_records:
+    q = r.get("quality_computed", 100)  # 新字段
+    if q < 85:
+        dropped += 1
+        continue
+
+    raw_topics = r.get("topics") or []
+    # 无特定主题（data-market-insight 兜底条目）不入图谱
+    if not raw_topics:
+        dropped += 1
+        continue
+
+    theme = raw_topics[0]  # 取第一个主题作为Tab分类
+    tag_cat = get_tag_category(r)
+
+    if theme not in theme_counter:
+        theme_counter[theme] = 0
+    theme_counter[theme] += 1
+    nid = f"{THEME_PREFIX.get(theme,'xx')}-{theme_counter[theme]}"
+
+    sr = r.get("success_rate")
+    sr_str = "null" if sr is None else str(sr)
+    summary = r.get("summary","") or ""
+    topics = r.get("topics") or []
+    tags_str = r.get("tags","") or ""
+
+    nodes_out.append({
+        "id":           nid,
+        "label":        r.get("title",""),
+        "theme":        theme,           # 5主题 Tab 分类
+        "tag_category": tag_cat,         # 资讯分类（detail panel）
+        "topics":       topics,           # 多主题列表
+        "summary":      esc(summary),
+        "source":       r.get("source",""),
+        "url":          r.get("archive_url",""),
+        "date":         r.get("source_date",""),
+        "quality":      q,
+        "success_rate": sr,
+        "tags":         tags_str,
+    })
+
+nodes_out.sort(key=lambda x: x.get("date",""), reverse=True)
+
+# ── 生成 data.js ───────────────────────────────────────────────────
+ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+
+node_lines = []
+for n in nodes_out:
+    sr = "null" if n["success_rate"] is None else n["success_rate"]
+    topics_str = ",".join(n["topics"])
+    line = (
+        '    {{ id: "{id}", label: "{label}", theme: "{theme}", '
+        'tag_category: "{tag}", topics: "{topics}", '
+        'source: "{src}", url: "{url}", date: "{date}", '
+        'summary: "{summary}", quality: {q}, connections: 0, success_rate: {sr} }},'
+    ).format(
+        id=n["id"],
+        label=esc(n["label"]),
+        theme=n["theme"],
+        tag=n["tag_category"],
+        topics=topics_str,
+        src=n["source"],
+        url=n["url"],
+        date=n["date"],
+        summary=n["summary"],
+        q=n["quality"],
+        sr=sr,
+    )
+    node_lines.append(line)
+
+theme_cfg_lines = []
+for name, cfg in THEME_CC.items():
+    theme_cfg_lines.append(
+        '  "{name}": {{ "color": "{color}", "emoji": "{emoji}" }}'.format(
+            name=name, color=cfg["color"], emoji=cfg["emoji"]
+        ))
+
+tag_cfg_lines = []
+for name, cfg in TAG_CC.items():
+    tag_cfg_lines.append(
+        '  "{name}": {{ "color": "{color}", "emoji": "{emoji}" }}'.format(
+            name=name, color=cfg["color"], emoji=cfg["emoji"]
+        ))
+
+data_js = """// Generated by sync-generator.py v8 @ {ts}
+// 5主题Tab视图 + 资讯tag双轨分类
+const KNOWLEDGE_DATA = {{
+  nodes: [
+{node_lines}
+  ]
+}};
+
+const THEME_CONFIG = {{
+{theme_cfg}
+}};
+
+const TAG_CONFIG = {{
+{tag_cfg}
+}};
+""".format(
+    ts=ts,
+    node_lines="\n".join(node_lines),
+    theme_cfg=",\n".join(theme_cfg_lines),
+    tag_cfg=",\n".join(tag_cfg_lines),
+)
+
+with open(DATA_FILE, "w", encoding="utf-8") as f:
+    f.write(data_js)
+
+print(f"✅ 生成完成")
+print(f"   入库: {len(nodes_out)} 条（丢弃 {dropped} 条）")
+print(f"   主题分布:")
+for t, cnt in theme_counter.items():
+    print(f"     {t}: {cnt}")
+print(f"   data.js: {len(data_js)} bytes")
